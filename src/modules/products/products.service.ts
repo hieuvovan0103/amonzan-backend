@@ -204,7 +204,24 @@ export class ProductsService {
             throw new NotFoundException('Không tìm thấy sản phẩm.');
         }
 
-        return data;
+        const { data: reviews } = await client
+            .from('reviews')
+            .select(
+                `
+        review_id,
+        rating,
+        comment,
+        created_at
+      `,
+            )
+            .eq('target_type', 'PRODUCT')
+            .eq('target_id', data.product_id)
+            .order('created_at', { ascending: false });
+
+        return {
+            ...data,
+            reviews: reviews ?? [],
+        };
     }
 
     private applyVariantFilters(products: any[], query: ProductQueryDto) {

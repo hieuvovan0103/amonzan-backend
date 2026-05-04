@@ -37,6 +37,13 @@ export type ProductVariantResponse = {
     available_stock: number;
 };
 
+export type ProductReviewResponse = {
+    review_id: string;
+    rating: number;
+    comment?: string | null;
+    created_at: string;
+};
+
 export type PublicProductCardResponse = {
     product_id: string;
     name: string;
@@ -66,6 +73,7 @@ export type PublicProductDetailResponse = {
     shop_profiles?: ProductShopResponse | null;
     product_images: ProductImageResponse[];
     product_variants: ProductVariantResponse[];
+    reviews?: ProductReviewResponse[];
 };
 
 export type VendorProductCardResponse = {
