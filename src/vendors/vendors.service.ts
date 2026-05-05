@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { RegisterVendorDto } from './dto/register-vendor.dto';
+import { UpdateShopProfileDto } from './dto/update-shop-profile.dto';
 
 type VendorVerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
@@ -355,5 +356,98 @@ export class VendorsService {
       message: 'Vendor registration submitted successfully',
       shopProfile,
     };
+  }
+
+  private readonly SHOP_SELECT_FIELDS = `
+    shop_id,
+    user_id,
+    shop_name,
+    description,
+    contact_phone,
+    contact_email,
+    partner_type,
+    identity_number,
+    province,
+    district,
+    address_detail,
+    logo_url,
+    verification_status,
+    rating_average,
+    is_active
+  `;
+
+  async getMyShop(authUserId: string) {
+    const supabase = this.supabaseService.client;
+
+    const profile = await this.getUserProfileByAuthId(authUserId);
+
+    const { data: shop, error } = await supabase
+      .from('shop_profiles')
+      .select(this.SHOP_SELECT_FIELDS)
+      .eq('user_id', profile.user_id)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Failed to load shop profile: ${error.message}`,
+      );
+    }
+
+    if (!shop) {
+      throw new NotFoundException('Shop profile not found.');
+    }
+
+    return shop;
+  }
+
+  async updateMyShop(authUserId: string, dto: UpdateShopProfileDto) {
+    const supabase = this.supabaseService.client;
+
+    const profile = await this.getUserProfileByAuthId(authUserId);
+
+    const { data: existingShop, error: fetchError } = await supabase
+      .from('shop_profiles')
+      .select('shop_id')
+      .eq('user_id', profile.user_id)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw new InternalServerErrorException(
+        `Failed to load shop profile: ${fetchError.message}`,
+      );
+    }
+
+    if (!existingShop) {
+      throw new NotFoundException('Shop profile not found.');
+    }
+
+    const updates: Record<string, any> = {};
+    if (dto.shopName !== undefined) updates.shop_name = dto.shopName;
+    if (dto.description !== undefined) updates.description = dto.description;
+    if (dto.contactPhone !== undefined) updates.contact_phone = dto.contactPhone;
+    if (dto.contactEmail !== undefined) updates.contact_email = dto.contactEmail;
+    if (dto.province !== undefined) updates.province = dto.province;
+    if (dto.district !== undefined) updates.district = dto.district;
+    if (dto.addressDetail !== undefined) updates.address_detail = dto.addressDetail;
+    if (dto.logoUrl !== undefined) updates.logo_url = dto.logoUrl;
+
+    if (Object.keys(updates).length === 0) {
+      throw new BadRequestException('No fields to update.');
+    }
+
+    const { data: updatedShop, error: updateError } = await supabase
+      .from('shop_profiles')
+      .update(updates)
+      .eq('shop_id', existingShop.shop_id)
+      .select(this.SHOP_SELECT_FIELDS)
+      .single();
+
+    if (updateError || !updatedShop) {
+      throw new InternalServerErrorException(
+        `Failed to update shop profile: ${updateError?.message}`,
+      );
+    }
+
+    return updatedShop;
   }
 }

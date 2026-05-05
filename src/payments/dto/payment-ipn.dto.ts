@@ -1,0 +1,1 @@
+export type VnpayIpnQueryDto = Record<string, string | undefined>;

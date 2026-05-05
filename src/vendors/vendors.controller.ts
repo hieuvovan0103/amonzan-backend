@@ -9,6 +9,7 @@ import {
 } from '@nestjs/swagger';
 import { VendorsService } from './vendors.service';
 import { RegisterVendorDto } from './dto/register-vendor.dto';
+import { UpdateShopProfileDto } from './dto/update-shop-profile.dto';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
@@ -70,5 +71,28 @@ export class VendorsController {
     @Body() dto: RegisterVendorDto,
   ) {
     return this.vendorsService.registerVendor(user, dto);
+  }
+
+  @Get('my-shop')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get the authenticated vendor shop profile.' })
+  @ApiResponse({ status: 200, description: 'Vendor shop profile.' })
+  @ApiResponse({ status: 404, description: 'Shop profile not found.' })
+  getMyShop(@CurrentUser() user: any) {
+    return this.vendorsService.getMyShop(user.id);
+  }
+
+  @Patch('my-shop')
+  @UseGuards(SupabaseAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update the authenticated vendor shop profile.' })
+  @ApiResponse({ status: 200, description: 'Shop profile updated.' })
+  @ApiResponse({ status: 400, description: 'Invalid update payload.' })
+  updateMyShop(
+    @CurrentUser() user: any,
+    @Body() dto: UpdateShopProfileDto,
+  ) {
+    return this.vendorsService.updateMyShop(user.id, dto);
   }
 }

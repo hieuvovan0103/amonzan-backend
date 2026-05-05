@@ -10,6 +10,8 @@ import { VendorProductsModule } from './vendor-products/vendor-products.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ShopsModule } from './modules/shops/shops.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { OrdersModule } from './orders/orders.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { CategoriesModule } from './modules/categories/categories.module';
     VendorProductsModule,
     ShopsModule,
     CategoriesModule,
+    OrdersModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
