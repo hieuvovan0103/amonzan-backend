@@ -68,7 +68,7 @@ export class ChatService {
 
   private async sendWithGemini(messages: MessageDto[]): Promise<string> {
     const geminiModel = this.getGeminiClient().getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: SYSTEM_PROMPT,
     });
 
