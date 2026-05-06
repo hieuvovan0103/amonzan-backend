@@ -12,6 +12,7 @@ import { ShopsModule } from './modules/shops/shops.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { PaymentsModule } from './payments/payments.module';
     CategoriesModule,
     OrdersModule,
     PaymentsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
