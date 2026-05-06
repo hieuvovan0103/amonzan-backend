@@ -80,7 +80,7 @@ export class VendorProductsController {
             type: 'object',
             required: ['status'],
             properties: {
-                status: { type: 'string', enum: ['DRAFT', 'ACTIVE', 'ARCHIVED'] },
+                status: { type: 'string', enum: ['DRAFT', 'ARCHIVED'] },
             },
         },
     })
@@ -88,9 +88,20 @@ export class VendorProductsController {
     updateStatus(
         @CurrentUser() user: any,
         @Param('productId') productId: string,
-        @Body() body: { status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED' },
+        @Body() body: { status: 'DRAFT' | 'ARCHIVED' },
     ) {
         return this.service.updateProductStatus(user.id, productId, body.status);
+    }
+
+    @Patch(':productId/submit-review')
+    @ApiOperation({ summary: 'Submit a draft or rejected product for admin review.' })
+    @ApiParam({ name: 'productId', description: 'Product id.' })
+    @ApiResponse({ status: 200, description: 'Product submitted for review.' })
+    submitReview(
+        @CurrentUser() user: any,
+        @Param('productId') productId: string,
+    ) {
+        return this.service.submitProductForReview(user.id, productId);
     }
 
     @Delete(':productId')

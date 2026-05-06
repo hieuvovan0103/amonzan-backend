@@ -42,6 +42,8 @@ export type ProductReviewResponse = {
     rating: number;
     comment?: string | null;
     created_at: string;
+    reviewer_name?: string | null;
+    reviewer_avatar_url?: string | null;
 };
 
 export type PublicProductCardResponse = {

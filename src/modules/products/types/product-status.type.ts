@@ -1,7 +1,14 @@
-export type ProductStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+export type ProductStatus =
+    | 'DRAFT'
+    | 'PENDING_REVIEW'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'ARCHIVED';
 
 export const PRODUCT_STATUS = {
     DRAFT: 'DRAFT',
-    ACTIVE: 'ACTIVE',
+    PENDING_REVIEW: 'PENDING_REVIEW',
+    APPROVED: 'APPROVED',
+    REJECTED: 'REJECTED',
     ARCHIVED: 'ARCHIVED',
 } as const;

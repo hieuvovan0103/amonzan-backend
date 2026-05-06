@@ -12,6 +12,12 @@ import { ShopsModule } from './modules/shops/shops.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
+import { AdminProductReviewModule } from './admin-product-review/admin-product-review.module';
+import { ProductReviewsModule } from './product-reviews/product-reviews.module';
+import { AdminReviewsModule } from './admin-reviews/admin-reviews.module';
+import { ReturnsModule } from './returns/returns.module';
+import { AdminDisputesModule } from './admin-disputes/admin-disputes.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -28,6 +34,12 @@ import { PaymentsModule } from './payments/payments.module';
     CategoriesModule,
     OrdersModule,
     PaymentsModule,
+    AdminProductReviewModule,
+    ProductReviewsModule,
+    AdminReviewsModule,
+    NotificationsModule,
+    ReturnsModule,
+    AdminDisputesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

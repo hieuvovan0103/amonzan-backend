@@ -6,6 +6,7 @@ export type MyOrderItemDto = {
     productName: string;
     productImage: string | null;
     variantName: string | null;
+    shopName: string | null;
     quantity: number;
     unitPricePerDay: number;
     lineSubtotal: number;
@@ -27,6 +28,37 @@ export type MyOrderDto = {
     createdAt: string;
     confirmedAt: string | null;
     completedAt: string | null;
+    earlyReturnRequest: {
+        requestId: string;
+        orderId: string;
+        requestedReturnAt: string;
+        originalRentalEnd: string;
+        reason: string | null;
+        status: string;
+        vendorResponseNote: string | null;
+        estimatedRefundAmount: number;
+        conditionImageUrls: string[];
+        approvedAt: string | null;
+        rejectedAt: string | null;
+        receivedAt: string | null;
+        returnConditionNote: string | null;
+        createdAt: string;
+    } | null;
+    returnRecord: {
+        recordId: string;
+        returnRequestedAt: string | null;
+        returnRequestNote: string | null;
+        returnConditionStatus: string | null;
+        returnEvidenceUrls: string[];
+        returnedAt: string | null;
+        returnConditionNote: string | null;
+        vendorReturnStatus: string;
+        vendorReturnNote: string | null;
+        returnIssueReason: string | null;
+        returnIssueDescription: string | null;
+        returnIssueEvidenceUrls: string[];
+        updatedAt: string | null;
+    } | null;
     address: {
         recipientName: string;
         phoneNumber: string;

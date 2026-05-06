@@ -19,6 +19,11 @@ export class ProductQueryDto extends PaginationQueryDto {
     @IsString()
     categorySlug?: string;
 
+    @ApiPropertyOptional({ description: 'Filter by category slug. Alias for categorySlug.' })
+    @IsOptional()
+    @IsString()
+    category?: string;
+
     @ApiPropertyOptional({ minimum: 0, description: 'Minimum daily rental price.' })
     @IsOptional()
     @Type(() => Number)

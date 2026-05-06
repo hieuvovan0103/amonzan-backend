@@ -14,9 +14,11 @@ export class SupabaseAuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest()
 
     const authHeader = request.headers.authorization || ''
+    console.log('authHeader:', authHeader);
 
     // 1. Check header có tồn tại không
     if (!authHeader.startsWith('Bearer ')) {
+      console.log('Missing Bearer token:', request.headers);
       throw new UnauthorizedException('Thiếu access token')
     }
 
@@ -28,6 +30,7 @@ export class SupabaseAuthGuard implements CanActivate {
       await this.supabaseService.client.auth.getUser(token)
 
     if (error || !data.user) {
+      console.error('Supabase auth error:', error, 'data:', data);
       throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn')
     }
 

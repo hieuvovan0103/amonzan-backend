@@ -9,6 +9,7 @@ import {
     IsUUID,
     Min,
     ValidateNested,
+    ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -53,13 +54,6 @@ class CreateProductVariantDto {
     @Min(0)
     base_weekly_rate?: number;
 
-    @ApiPropertyOptional({ minimum: 0, example: 300000 })
-    @IsOptional()
-    @Type(() => Number)
-    @IsNumber()
-    @Min(0)
-    deposit_requirement?: number;
-
     @ApiPropertyOptional({ enum: ['NEW', 'GOOD', 'FAIR', 'DAMAGED'], default: 'NEW' })
     @IsOptional()
     @IsIn(['NEW', 'GOOD', 'FAIR', 'DAMAGED'])
@@ -86,22 +80,16 @@ export class CreateVendorProductDto {
     @IsString()
     description?: string;
 
-    @ApiPropertyOptional({ format: 'uuid' })
-    @IsOptional()
+    @ApiProperty({ format: 'uuid' })
     @IsUUID()
-    category_id?: string;
+    category_id: string;
 
-    @ApiPropertyOptional({ enum: ['DRAFT', 'ACTIVE'], default: 'DRAFT' })
-    @IsOptional()
-    @IsIn(['DRAFT', 'ACTIVE'])
-    status?: 'DRAFT' | 'ACTIVE';
-
-    @ApiPropertyOptional({ type: [CreateProductImageDto] })
-    @IsOptional()
+    @ApiProperty({ type: [CreateProductImageDto] })
     @IsArray()
+    @ArrayMinSize(1, { message: 'Vui lòng tải lên ít nhất một ảnh sản phẩm.' })
     @ValidateNested({ each: true })
     @Type(() => CreateProductImageDto)
-    images?: CreateProductImageDto[];
+    images: CreateProductImageDto[];
 
     @ApiProperty({ type: [CreateProductVariantDto] })
     @IsArray()
