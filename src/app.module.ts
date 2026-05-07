@@ -12,6 +12,7 @@ import { ShopsModule } from './modules/shops/shops.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
+import { ChatModule } from './chat/chat.module';
 import { AdminProductReviewModule } from './admin-product-review/admin-product-review.module';
 import { ProductReviewsModule } from './product-reviews/product-reviews.module';
 import { AdminReviewsModule } from './admin-reviews/admin-reviews.module';
@@ -36,6 +37,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     OrdersModule,
     PaymentsModule,
     AdminProductReviewModule,
+    ChatModule,
     ProductReviewsModule,
     AdminReviewsModule,
     ReviewsModule,
