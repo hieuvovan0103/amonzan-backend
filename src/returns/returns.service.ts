@@ -79,6 +79,28 @@ export class ReturnsService {
                 relatedId: orderId,
             },
         );
+        await this.createNotifications(
+            [userProfile.user_id],
+            "RETURN_REQUEST_CREATED",
+            "Đã gửi yêu cầu hoàn trả",
+            `Yêu cầu hoàn trả cho đơn #${orderId.slice(0, 8)} đã được gửi đến shop.`,
+            {
+                actionUrl: `/orders/${orderId}`,
+                relatedType: "ORDER",
+                relatedId: orderId,
+            },
+        );
+        await this.createNotifications(
+            await this.getAdminUserIds(),
+            "RETURN_REQUEST_CREATED",
+            "Có yêu cầu hoàn trả mới",
+            `Đơn #${orderId.slice(0, 8)} có yêu cầu hoàn trả mới.`,
+            {
+                actionUrl: `/dashboard/admin/orders?orderId=${orderId}`,
+                relatedType: "ORDER",
+                relatedId: orderId,
+            },
+        );
 
         return {
             orderId,
@@ -227,6 +249,28 @@ export class ReturnsService {
                 relatedId: orderId,
             },
         );
+        await this.createNotifications(
+            await this.getOrderVendorUserIds(orderId),
+            "RETURN_CONFIRMED",
+            "Hoàn trả đã được xác nhận",
+            `Shop đã xác nhận nhận hàng hoàn trả cho đơn #${orderId.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/vendor/returns?orderId=${orderId}`,
+                relatedType: "ORDER",
+                relatedId: orderId,
+            },
+        );
+        await this.createNotifications(
+            await this.getAdminUserIds(),
+            "RETURN_CONFIRMED",
+            "Hoàn trả đã được xác nhận",
+            `Shop đã xác nhận nhận hàng hoàn trả cho đơn #${orderId.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/admin/orders?orderId=${orderId}`,
+                relatedType: "ORDER",
+                relatedId: orderId,
+            },
+        );
 
         return { orderId, status: "COMPLETED", message: "Đã xác nhận hoàn trả thành công." };
     }
@@ -278,6 +322,28 @@ export class ReturnsService {
             `Shop đã báo vấn đề với đơn #${orderId.slice(0, 8)}. Bạn có thể xem kết quả và khiếu nại nếu không đồng ý.`,
             {
                 actionUrl: `/orders/${orderId}`,
+                relatedType: "ORDER",
+                relatedId: orderId,
+            },
+        );
+        await this.createNotifications(
+            await this.getOrderVendorUserIds(orderId),
+            "RETURN_REPORTED_ISSUE",
+            "Shop báo vấn đề hoàn trả",
+            `Shop đã báo vấn đề với đơn #${orderId.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/vendor/returns?orderId=${orderId}`,
+                relatedType: "ORDER",
+                relatedId: orderId,
+            },
+        );
+        await this.createNotifications(
+            await this.getAdminUserIds(),
+            "RETURN_REPORTED_ISSUE",
+            "Shop báo vấn đề hoàn trả",
+            `Shop đã báo vấn đề với đơn #${orderId.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/admin/disputes?orderId=${orderId}`,
                 relatedType: "ORDER",
                 relatedId: orderId,
             },
@@ -355,6 +421,28 @@ export class ReturnsService {
             `Người thuê đã gửi khiếu nại kết quả hoàn trả cho đơn #${orderId.slice(0, 8)}.`,
             {
                 actionUrl: `/dashboard/admin/disputes?disputeId=${dispute.dispute_id}`,
+                relatedType: "DISPUTE",
+                relatedId: dispute.dispute_id,
+            },
+        );
+        await this.createNotifications(
+            [userProfile.user_id],
+            "RETURN_COMPLAINT_CREATED",
+            "Khiếu nại hoàn trả đã được ghi nhận",
+            `Khiếu nại hoàn trả cho đơn #${orderId.slice(0, 8)} đã được gửi đến admin xử lý.`,
+            {
+                actionUrl: `/orders/${orderId}`,
+                relatedType: "DISPUTE",
+                relatedId: dispute.dispute_id,
+            },
+        );
+        await this.createNotifications(
+            await this.getOrderVendorUserIds(orderId),
+            "RETURN_COMPLAINT_CREATED",
+            "Có khiếu nại hoàn trả mới",
+            `Người thuê đã gửi khiếu nại hoàn trả cho đơn #${orderId.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/vendor/returns?orderId=${orderId}`,
                 relatedType: "DISPUTE",
                 relatedId: dispute.dispute_id,
             },
@@ -457,6 +545,28 @@ export class ReturnsService {
             `Người thuê đã khiếu nại việc shop từ chối trả hàng sớm cho đơn #${orderId.slice(0, 8)}.`,
             {
                 actionUrl: `/dashboard/admin/disputes?disputeId=${dispute.dispute_id}`,
+                relatedType: "DISPUTE",
+                relatedId: dispute.dispute_id,
+            },
+        );
+        await this.createNotifications(
+            [userProfile.user_id],
+            "RETURN_COMPLAINT_CREATED",
+            "Khiếu nại trả hàng sớm đã được ghi nhận",
+            `Khiếu nại trả hàng sớm cho đơn #${orderId.slice(0, 8)} đã được gửi đến admin xử lý.`,
+            {
+                actionUrl: `/orders/${orderId}`,
+                relatedType: "DISPUTE",
+                relatedId: dispute.dispute_id,
+            },
+        );
+        await this.createNotifications(
+            await this.getOrderVendorUserIds(orderId),
+            "RETURN_COMPLAINT_CREATED",
+            "Có khiếu nại trả hàng sớm mới",
+            `Người thuê đã khiếu nại việc shop từ chối trả hàng sớm cho đơn #${orderId.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/vendor/returns?orderId=${orderId}`,
                 relatedType: "DISPUTE",
                 relatedId: dispute.dispute_id,
             },
@@ -615,16 +725,38 @@ export class ReturnsService {
             throw new BadRequestException(`Không thể cập nhật khiếu nại: ${complaintError.message}`);
         }
 
-        const notifyUserIds = [
-            await this.getOrderRenterUserId(dispute.order_id),
-            ...(await this.getOrderVendorUserIds(dispute.order_id)),
-        ];
-
         await this.createNotifications(
-            [...new Set(notifyUserIds.filter(Boolean))],
-            "SYSTEM",
+            [await this.getOrderRenterUserId(dispute.order_id)],
+            "DISPUTE_RESOLVED",
             "Tranh chấp đã được xử lý",
             `Admin đã xử lý tranh chấp cho đơn #${dispute.order_id.slice(0, 8)}.`,
+            {
+                actionUrl: `/orders/${dispute.order_id}`,
+                relatedType: "DISPUTE",
+                relatedId: disputeId,
+            },
+        );
+        await this.createNotifications(
+            await this.getOrderVendorUserIds(dispute.order_id),
+            "DISPUTE_RESOLVED",
+            "Tranh chấp đã được xử lý",
+            `Admin đã xử lý tranh chấp cho đơn #${dispute.order_id.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/vendor/returns?orderId=${dispute.order_id}`,
+                relatedType: "DISPUTE",
+                relatedId: disputeId,
+            },
+        );
+        await this.createNotifications(
+            await this.getAdminUserIds(),
+            "DISPUTE_RESOLVED",
+            "Tranh chấp đã được xử lý",
+            `Admin đã xử lý tranh chấp cho đơn #${dispute.order_id.slice(0, 8)}.`,
+            {
+                actionUrl: `/dashboard/admin/disputes?disputeId=${disputeId}`,
+                relatedType: "DISPUTE",
+                relatedId: disputeId,
+            },
         );
 
         return {

@@ -6,12 +6,14 @@ import {
     UnauthorizedException,
 } from "@nestjs/common";
 import { SupabaseService } from "../supabase/supabase.service";
+import { NotificationTypes } from "../modules/notifications/notification-types";
 import { ConfirmReturnReceivedDto } from "./dto/confirm-return-received.dto";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { EarlyReturnRequestDto } from "./dto/early-return-request.dto";
 import { VendorRenterReviewDto } from "./dto/vendor-renter-review.dto";
 import type { CreateOrderResponseDto } from "./dto/create-order-response.dto";
 import type { MyOrdersResponseDto } from "./dto/my-orders-response.dto";
+import { OrderNotificationService } from "./order-notification.service";
 
 type CalculatedOrderItem = {
     variantId: string;
@@ -27,7 +29,10 @@ type CalculatedOrderItem = {
 
 @Injectable()
 export class OrdersService {
-    constructor(private readonly supabaseService: SupabaseService) {}
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly orderNotificationService: OrderNotificationService,
+    ) {}
 
     private readonly bookedOrderStatuses = [
         "PENDING_VENDOR_APPROVAL",
@@ -137,6 +142,11 @@ export class OrdersService {
                 }`,
             );
         }
+
+        await this.orderNotificationService.notifyOrderEvent(
+            order.order_id,
+            NotificationTypes.OrderCreated,
+        );
 
         return {
             orderId: order.order_id,
@@ -479,6 +489,11 @@ export class OrdersService {
             throw new BadRequestException(`Không thể gửi yêu cầu trả hàng sớm: ${error?.message || "Unknown error"}`);
         }
 
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.EarlyReturnRequested,
+        );
+
         return {
             request: this.mapEarlyReturnRequest(data),
             message: "Đã gửi yêu cầu trả hàng sớm đến shop.",
@@ -525,6 +540,11 @@ export class OrdersService {
             pickup_at: new Date().toISOString(),
             pickup_condition_note: "Người thuê đã xác nhận nhận hàng.",
         });
+
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.OrderRenterConfirmedReceived,
+        );
 
         return {
             orderId,
@@ -670,6 +690,11 @@ export class OrdersService {
                 });
         }
 
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.EarlyReturnApproved,
+        );
+
         return { orderId, status: "RETURN_PENDING", message: "Đã chấp nhận yêu cầu trả hàng sớm" };
     }
 
@@ -699,6 +724,11 @@ export class OrdersService {
         if (error) {
             throw new BadRequestException(`Không thể từ chối yêu cầu trả sớm: ${error.message}`);
         }
+
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.EarlyReturnRejected,
+        );
 
         return { orderId, status: "IN_RENTAL", message: "Đã từ chối yêu cầu trả hàng sớm" };
     }
@@ -753,6 +783,15 @@ export class OrdersService {
         if (orderError) {
             throw new BadRequestException(`Không thể hoàn tất đơn trả hàng: ${orderError.message}`);
         }
+
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.EarlyReturnReceived,
+        );
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.OrderCompleted,
+        );
 
         return {
             orderId,
@@ -820,6 +859,11 @@ export class OrdersService {
                 throw new BadRequestException(`Không thể từ chối đơn thuê: ${updateError.message}`);
             }
 
+            await this.orderNotificationService.notifyOrderEvent(
+                orderId,
+                NotificationTypes.OrderCancelled,
+            );
+
             return { orderId, status: "CANCELLED", message: "Đã từ chối đơn thuê" };
         }
 
@@ -834,6 +878,11 @@ export class OrdersService {
         if (updateError) {
             throw new BadRequestException(`Không thể chấp nhận đơn thuê: ${updateError.message}`);
         }
+
+        await this.orderNotificationService.notifyOrderEvent(
+            orderId,
+            NotificationTypes.OrderConfirmed,
+        );
 
         return { orderId, status: "CONFIRMED", message: "Đã chấp nhận đơn thuê" };
     }

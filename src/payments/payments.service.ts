@@ -3,6 +3,8 @@ import {
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
+import { NotificationTypes } from "../modules/notifications/notification-types";
+import { OrderNotificationService } from "../orders/order-notification.service";
 import { SupabaseService } from "../supabase/supabase.service";
 import { VnpayProvider } from "./providers/vnpay.provider";
 import type { PaymentStatusResponseDto } from "./dto/payment-status-response.dto";
@@ -20,7 +22,10 @@ export class PaymentsService {
         "DISPUTED",
     ];
 
-    constructor(private readonly supabaseService: SupabaseService) { }
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly orderNotificationService: OrderNotificationService,
+    ) { }
 
     async createVnpayPaymentUrl(orderId: string, ipAddress: string) {
         const supabase = this.supabaseService.client;
@@ -165,6 +170,11 @@ export class PaymentsService {
                     payment_status: "FAILED",
                 })
                 .eq("order_id", payment.order_id);
+
+            await this.orderNotificationService.notifyOrderEvent(
+                payment.order_id,
+                NotificationTypes.PaymentFailed,
+            );
 
             return {
                 RspCode: "00",
@@ -357,6 +367,11 @@ export class PaymentsService {
                 message: "Cannot update order",
             };
         }
+
+        await this.orderNotificationService.notifyOrderEvent(
+            payment.order_id,
+            NotificationTypes.OrderPaid,
+        );
 
         return {
             ok: true,
