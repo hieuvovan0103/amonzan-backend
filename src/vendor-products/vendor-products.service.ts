@@ -249,7 +249,7 @@ export class VendorProductsService {
                 name: dto.name,
                 slug: dto.slug,
                 description: dto.description ?? null,
-                status: 'DRAFT',
+                status: 'PENDING_REVIEW',
                 rejection_reason: null,
             })
             .select('*')
