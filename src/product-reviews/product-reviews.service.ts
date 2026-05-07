@@ -21,6 +21,7 @@ type ProductReviewRow = {
   updated_at?: string;
   is_hidden?: boolean;
   renter_profiles?: any;
+  review_replies?: any;
 };
 
 @Injectable()
@@ -51,6 +52,17 @@ export class ProductReviewsService {
           user_profiles (
             full_name,
             avatar_url
+          )
+        ),
+        review_replies (
+          reply_id,
+          review_id,
+          shop_id,
+          content,
+          created_at,
+          updated_at,
+          shop_profiles (
+            shop_name
           )
         )
       `,
@@ -167,6 +179,17 @@ export class ProductReviewsService {
             full_name,
             avatar_url
           )
+        ),
+        review_replies (
+          reply_id,
+          review_id,
+          shop_id,
+          content,
+          created_at,
+          updated_at,
+          shop_profiles (
+            shop_name
+          )
         )
       `,
       )
@@ -225,6 +248,17 @@ export class ProductReviewsService {
           user_profiles (
             full_name,
             avatar_url
+          )
+        ),
+        review_replies (
+          reply_id,
+          review_id,
+          shop_id,
+          content,
+          created_at,
+          updated_at,
+          shop_profiles (
+            shop_name
           )
         )
       `,
@@ -378,6 +412,17 @@ export class ProductReviewsService {
             full_name,
             avatar_url
           )
+        ),
+        review_replies (
+          reply_id,
+          review_id,
+          shop_id,
+          content,
+          created_at,
+          updated_at,
+          shop_profiles (
+            shop_name
+          )
         )
       `,
       )
@@ -424,6 +469,26 @@ export class ProductReviewsService {
       created_at: review.created_at,
       reviewer_name: userProfile?.full_name || 'Người thuê Amonzan',
       reviewer_avatar_url: userProfile?.avatar_url ?? null,
+      shop_reply: this.mapReply(review.review_replies),
+    };
+  }
+
+  private mapReply(replyInput: any) {
+    const reply = Array.isArray(replyInput) ? replyInput[0] : replyInput;
+    if (!reply) return null;
+
+    const shop = Array.isArray(reply.shop_profiles)
+      ? reply.shop_profiles[0]
+      : reply.shop_profiles;
+
+    return {
+      reply_id: reply.reply_id,
+      review_id: reply.review_id,
+      shop_id: reply.shop_id,
+      shop_name: shop?.shop_name ?? 'Shop Amonzan',
+      content: reply.content,
+      created_at: reply.created_at,
+      updated_at: reply.updated_at,
     };
   }
 }

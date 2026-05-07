@@ -50,6 +50,17 @@ export class AdminReviewsService {
             full_name,
             email
           )
+        ),
+        review_replies (
+          reply_id,
+          review_id,
+          shop_id,
+          content,
+          created_at,
+          updated_at,
+          shop_profiles (
+            shop_name
+          )
         )
       `,
       )
@@ -102,8 +113,28 @@ export class AdminReviewsService {
           reviewerShopName || userProfile?.full_name || 'Người thuê Amonzan',
         reviewer_email: userProfile?.email ?? null,
         product: productsById.get(review.target_id) ?? null,
+        shop_reply: this.mapReply(review.review_replies),
       };
     });
+  }
+
+  private mapReply(replyInput: any) {
+    const reply = Array.isArray(replyInput) ? replyInput[0] : replyInput;
+    if (!reply) return null;
+
+    const shop = Array.isArray(reply.shop_profiles)
+      ? reply.shop_profiles[0]
+      : reply.shop_profiles;
+
+    return {
+      reply_id: reply.reply_id,
+      review_id: reply.review_id,
+      shop_id: reply.shop_id,
+      shop_name: shop?.shop_name ?? 'Shop Amonzan',
+      content: reply.content,
+      created_at: reply.created_at,
+      updated_at: reply.updated_at,
+    };
   }
 
   async hide(authUserId: string, reviewId: string) {

@@ -22,6 +22,9 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { ReturnsModule } from './returns/returns.module';
 import { AdminDisputesModule } from './admin-disputes/admin-disputes.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { VouchersModule } from './vouchers/vouchers.module';
+import { AdminPaymentsModule } from './admin-payments/admin-payments.module';
+import { AdminOrdersModule } from './admin-orders/admin-orders.module';
 
 @Module({
   imports: [
@@ -46,8 +49,11 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     AdminReviewsModule,
     ReviewsModule,
     NotificationsModule,
+    VouchersModule,
     ReturnsModule,
     AdminDisputesModule,
+    AdminPaymentsModule,
+    AdminOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

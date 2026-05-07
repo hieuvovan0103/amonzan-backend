@@ -251,6 +251,17 @@ export class ProductsService {
             full_name,
             avatar_url
           )
+        ),
+        review_replies (
+          reply_id,
+          review_id,
+          shop_id,
+          content,
+          created_at,
+          updated_at,
+          shop_profiles (
+            shop_name
+          )
         )
       `,
             )
@@ -273,8 +284,28 @@ export class ProductsService {
                     created_at: review.created_at,
                     reviewer_name: userProfile?.full_name || 'Người thuê Amonzan',
                     reviewer_avatar_url: userProfile?.avatar_url ?? null,
+                    shop_reply: this.mapReviewReply(review.review_replies),
                 };
             }),
+        };
+    }
+
+    private mapReviewReply(replyInput: any) {
+        const reply = Array.isArray(replyInput) ? replyInput[0] : replyInput;
+        if (!reply) return null;
+
+        const shop = Array.isArray(reply.shop_profiles)
+            ? reply.shop_profiles[0]
+            : reply.shop_profiles;
+
+        return {
+            reply_id: reply.reply_id,
+            review_id: reply.review_id,
+            shop_id: reply.shop_id,
+            shop_name: shop?.shop_name ?? 'Shop Amonzan',
+            content: reply.content,
+            created_at: reply.created_at,
+            updated_at: reply.updated_at,
         };
     }
 
@@ -397,6 +428,11 @@ export class ProductsService {
         return date.toISOString().slice(0, 10);
     }
 
+    private toUtcMidnightTimestamp(dateOnly: string) {
+        // dateOnly must be YYYY-MM-DD
+        return `${dateOnly}T00:00:00.000Z`;
+    }
+
     private async hasBlockedPeriod(variantId: string, start: string, end: string) {
         const client = this.supabase.client;
 
@@ -427,6 +463,8 @@ export class ProductsService {
 
     private async getBookedQuantity(variantId: string, start: string, end: string) {
         const client = this.supabase.client;
+        const startTs = this.toUtcMidnightTimestamp(start);
+        const endTs = this.toUtcMidnightTimestamp(end);
 
         const { data, error } = await client
             .from('rental_order_items')
@@ -442,8 +480,8 @@ export class ProductsService {
             )
             .eq('variant_id', variantId)
             .in('rental_orders.status', this.bookedOrderStatuses)
-            .lt('rental_orders.rental_start', end)
-            .gt('rental_orders.rental_end', start);
+            .lt('rental_orders.rental_start', endTs)
+            .gt('rental_orders.rental_end', startTs);
 
         if (error) {
             throw error;

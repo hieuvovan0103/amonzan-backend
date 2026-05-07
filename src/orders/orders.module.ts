@@ -4,9 +4,10 @@ import { OrderNotificationService } from "./order-notification.service";
 import { OrdersService } from "./orders.service";
 import { NotificationsModule } from "../modules/notifications/notifications.module";
 import { SupabaseModule } from "../supabase/supabase.module";
+import { VouchersModule } from "../vouchers/vouchers.module";
 
 @Module({
-    imports: [SupabaseModule, NotificationsModule],
+    imports: [SupabaseModule, NotificationsModule, VouchersModule],
     controllers: [OrdersController],
     providers: [OrdersService, OrderNotificationService],
     exports: [OrdersService, OrderNotificationService],

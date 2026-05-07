@@ -150,7 +150,87 @@ export class VendorProductsService {
             throw new NotFoundException('Không tìm thấy sản phẩm');
         }
 
-        return data;
+        const { data: reviews, error: reviewError } = await this.supabase
+            .from('reviews')
+            .select(
+                `
+                review_id,
+                rating,
+                comment,
+                created_at,
+                is_hidden,
+                reported_at,
+                report_status,
+                report_reason,
+                renter_profiles (
+                    user_profiles (
+                        full_name,
+                        avatar_url
+                    )
+                ),
+                review_replies (
+                    reply_id,
+                    review_id,
+                    shop_id,
+                    content,
+                    created_at,
+                    updated_at,
+                    shop_profiles (
+                        shop_name
+                    )
+                )
+            `,
+            )
+            .eq('target_type', 'PRODUCT')
+            .eq('target_id', productId)
+            .order('created_at', { ascending: false })
+            .limit(50);
+
+        if (reviewError) {
+            throw new BadRequestException(`Không thể tải đánh giá sản phẩm: ${reviewError.message}`);
+        }
+
+        return {
+            ...data,
+            reviews: (reviews ?? []).map((review: any) => {
+                const userProfile = Array.isArray(review.renter_profiles?.user_profiles)
+                    ? review.renter_profiles.user_profiles[0]
+                    : review.renter_profiles?.user_profiles;
+
+                return {
+                    review_id: review.review_id,
+                    rating: Number(review.rating ?? 0),
+                    comment: review.comment ?? null,
+                    created_at: review.created_at,
+                    is_hidden: Boolean(review.is_hidden),
+                    reported_at: review.reported_at ?? null,
+                    report_status: review.report_status ?? 'NONE',
+                    report_reason: review.report_reason ?? null,
+                    reviewer_name: userProfile?.full_name ?? 'Người thuê Amonzan',
+                    reviewer_avatar_url: userProfile?.avatar_url ?? null,
+                    shop_reply: this.mapReviewReply(review.review_replies),
+                };
+            }),
+        };
+    }
+
+    private mapReviewReply(replyInput: any) {
+        const reply = Array.isArray(replyInput) ? replyInput[0] : replyInput;
+        if (!reply) return null;
+
+        const shop = Array.isArray(reply.shop_profiles)
+            ? reply.shop_profiles[0]
+            : reply.shop_profiles;
+
+        return {
+            reply_id: reply.reply_id,
+            review_id: reply.review_id,
+            shop_id: reply.shop_id,
+            shop_name: shop?.shop_name ?? 'Shop Amonzan',
+            content: reply.content,
+            created_at: reply.created_at,
+            updated_at: reply.updated_at,
+        };
     }
 
     async createProduct(authUserId: string, dto: CreateVendorProductDto) {

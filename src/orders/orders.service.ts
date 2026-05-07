@@ -14,6 +14,7 @@ import { VendorRenterReviewDto } from "./dto/vendor-renter-review.dto";
 import type { CreateOrderResponseDto } from "./dto/create-order-response.dto";
 import type { MyOrdersResponseDto } from "./dto/my-orders-response.dto";
 import { OrderNotificationService } from "./order-notification.service";
+import { VouchersService } from "../vouchers/vouchers.service";
 
 type CalculatedOrderItem = {
     variantId: string;
@@ -32,6 +33,7 @@ export class OrdersService {
     constructor(
         private readonly supabaseService: SupabaseService,
         private readonly orderNotificationService: OrderNotificationService,
+        private readonly vouchersService: VouchersService,
     ) {}
 
     private readonly bookedOrderStatuses = [
@@ -68,7 +70,12 @@ export class OrdersService {
         const subtotal = calculatedItems.reduce((sum, item) => sum + item.lineSubtotal, 0);
         const depositAmount = 0;
         const shippingFee = this.calculateShippingFee();
-        const discountAmount = await this.calculateDiscount(dto.voucherCode, subtotal);
+        const voucher = await this.calculateDiscount(
+            dto.voucherCode,
+            subtotal,
+            calculatedItems[0]?.shopId,
+        );
+        const discountAmount = voucher.discountAmount;
         const totalAmount = subtotal + shippingFee - discountAmount;
         const rentalStart = this.getEarliestRentalStart(calculatedItems);
         const rentalEnd = this.getLatestRentalEnd(calculatedItems);
@@ -78,7 +85,7 @@ export class OrdersService {
             .insert({
                 renter_profile_id: renterProfile.renter_profile_id,
                 address_id: dto.addressId,
-                voucher_id: null,
+                voucher_id: voucher.voucherId,
                 penalty_policy_id: penaltyPolicyId,
                 status: "PENDING_PAYMENT",
                 payment_status: "UNPAID",
@@ -310,6 +317,14 @@ export class OrdersService {
                 created_at,
                 confirmed_at,
                 completed_at,
+                disputes (
+                    dispute_id,
+                    status,
+                    reason,
+                    resolution,
+                    opened_at,
+                    resolved_at
+                ),
                 early_return_requests (
                     request_id,
                     requested_return_at,
@@ -1417,6 +1432,8 @@ export class OrdersService {
 
     private async getBookedQuantity(variantId: string, start: string, end: string) {
         const supabase = this.supabaseService.client;
+        const startTs = `${start}T00:00:00.000Z`;
+        const endTs = `${end}T00:00:00.000Z`;
 
         const { data, error } = await supabase
             .from("rental_order_items")
@@ -1432,8 +1449,8 @@ export class OrdersService {
             )
             .eq("variant_id", variantId)
             .in("rental_orders.status", this.bookedOrderStatuses)
-            .lt("rental_orders.rental_start", end)
-            .gt("rental_orders.rental_end", start);
+            .lt("rental_orders.rental_start", endTs)
+            .gt("rental_orders.rental_end", startTs);
 
         if (error) {
             throw new BadRequestException(`Không thể kiểm tra lịch thuê: ${error.message}`);
@@ -1462,14 +1479,28 @@ export class OrdersService {
     private async calculateDiscount(
         voucherCode: string | undefined,
         subtotal: number,
+        shopId?: string,
     ) {
-        if (!voucherCode) return 0;
-
-        if (voucherCode.trim().toUpperCase() === "AMONZAN50") {
-            return Math.min(50000, subtotal);
+        if (!voucherCode?.trim()) {
+            return {
+                discountAmount: 0,
+                voucherId: null as string | null,
+            };
         }
 
-        return 0;
+        const validation = await this.vouchersService.validateVoucher(
+            {
+                code: voucherCode,
+                subtotal,
+                shopId,
+            },
+            { throwOnInvalid: true },
+        );
+
+        return {
+            discountAmount: validation.discountAmount,
+            voucherId: validation.voucherId,
+        };
     }
 
     private getEarliestRentalStart(items: { rentalStart: string }[]) {
@@ -1717,6 +1748,7 @@ export class OrdersService {
         const payment = Array.isArray(order.payment_transactions)
             ? order.payment_transactions[0]
             : order.payment_transactions;
+        const dispute = Array.isArray(order.disputes) ? order.disputes[0] : order.disputes;
         const earlyReturnRequests = [...(order.early_return_requests ?? [])].sort(
             (a: any, b: any) =>
                 new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
@@ -1773,6 +1805,16 @@ export class OrdersService {
             createdAt: order.created_at,
             confirmedAt: order.confirmed_at,
             completedAt: order.completed_at,
+            dispute: dispute
+                ? {
+                      disputeId: dispute.dispute_id,
+                      status: dispute.status,
+                      reason: dispute.reason ?? null,
+                      resolution: dispute.resolution ?? null,
+                      openedAt: dispute.opened_at ?? null,
+                      resolvedAt: dispute.resolved_at ?? null,
+                  }
+                : null,
             earlyReturnRequest: earlyReturnRequests[0]
                 ? this.mapEarlyReturnRequest(earlyReturnRequests[0])
                 : null,
