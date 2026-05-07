@@ -90,17 +90,6 @@ export class ReturnsService {
                 relatedId: orderId,
             },
         );
-        await this.createNotifications(
-            await this.getAdminUserIds(),
-            "RETURN_REQUEST_CREATED",
-            "Có yêu cầu hoàn trả mới",
-            `Đơn #${orderId.slice(0, 8)} có yêu cầu hoàn trả mới.`,
-            {
-                actionUrl: `/dashboard/admin/orders?orderId=${orderId}`,
-                relatedType: "ORDER",
-                relatedId: orderId,
-            },
-        );
 
         return {
             orderId,
@@ -260,17 +249,6 @@ export class ReturnsService {
                 relatedId: orderId,
             },
         );
-        await this.createNotifications(
-            await this.getAdminUserIds(),
-            "RETURN_CONFIRMED",
-            "Hoàn trả đã được xác nhận",
-            `Shop đã xác nhận nhận hàng hoàn trả cho đơn #${orderId.slice(0, 8)}.`,
-            {
-                actionUrl: `/dashboard/admin/orders?orderId=${orderId}`,
-                relatedType: "ORDER",
-                relatedId: orderId,
-            },
-        );
 
         return { orderId, status: "COMPLETED", message: "Đã xác nhận hoàn trả thành công." };
     }
@@ -333,17 +311,6 @@ export class ReturnsService {
             `Shop đã báo vấn đề với đơn #${orderId.slice(0, 8)}.`,
             {
                 actionUrl: `/dashboard/vendor/returns?orderId=${orderId}`,
-                relatedType: "ORDER",
-                relatedId: orderId,
-            },
-        );
-        await this.createNotifications(
-            await this.getAdminUserIds(),
-            "RETURN_REPORTED_ISSUE",
-            "Shop báo vấn đề hoàn trả",
-            `Shop đã báo vấn đề với đơn #${orderId.slice(0, 8)}.`,
-            {
-                actionUrl: `/dashboard/admin/disputes?orderId=${orderId}`,
                 relatedType: "ORDER",
                 relatedId: orderId,
             },
@@ -743,17 +710,6 @@ export class ReturnsService {
             `Admin đã xử lý tranh chấp cho đơn #${dispute.order_id.slice(0, 8)}.`,
             {
                 actionUrl: `/dashboard/vendor/returns?orderId=${dispute.order_id}`,
-                relatedType: "DISPUTE",
-                relatedId: disputeId,
-            },
-        );
-        await this.createNotifications(
-            await this.getAdminUserIds(),
-            "DISPUTE_RESOLVED",
-            "Tranh chấp đã được xử lý",
-            `Admin đã xử lý tranh chấp cho đơn #${dispute.order_id.slice(0, 8)}.`,
-            {
-                actionUrl: `/dashboard/admin/disputes?disputeId=${disputeId}`,
                 relatedType: "DISPUTE",
                 relatedId: disputeId,
             },

@@ -1,10 +1,14 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { UseGuards } from '@nestjs/common';
+import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
 import { ChatService } from './chat.service';
 import { ChatRequestDto } from './dto/chat-message.dto';
 
 @ApiTags('chat')
+@ApiBearerAuth()
 @Controller('chat')
+@UseGuards(SupabaseAuthGuard)
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 

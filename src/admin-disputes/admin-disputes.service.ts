@@ -227,17 +227,6 @@ export class AdminDisputesService {
                 },
             );
         }
-        await this.createNotifications(
-            await this.getAdminUserIds(),
-            "DISPUTE_NEED_MORE_EVIDENCE",
-            "Đã yêu cầu bổ sung bằng chứng",
-            content,
-            {
-                actionUrl: `/dashboard/admin/disputes?disputeId=${disputeId}`,
-                relatedType: "DISPUTE",
-                relatedId: disputeId,
-            },
-        );
 
         return {
             disputeId,
@@ -372,17 +361,6 @@ export class AdminDisputesService {
                 relatedId: disputeId,
             },
         );
-        await this.createNotifications(
-            await this.getAdminUserIds(),
-            "DISPUTE_RESOLVED",
-            "Tranh chấp đã được xử lý",
-            resolvedContent,
-            {
-                actionUrl: `/dashboard/admin/disputes?disputeId=${disputeId}`,
-                relatedType: "DISPUTE",
-                relatedId: disputeId,
-            },
-        );
 
         return {
             disputeId,
@@ -472,16 +450,6 @@ export class AdminDisputesService {
                 }),
             ),
         ] as string[];
-    }
-
-    private async getAdminUserIds() {
-        const { data, error } = await this.supabaseService.client
-            .from("admin_profiles")
-            .select("user_id");
-
-        if (error) return [];
-
-        return (data ?? []).map((admin) => admin.user_id as string);
     }
 
     private getComplaintStatusForDecision(decision: string) {

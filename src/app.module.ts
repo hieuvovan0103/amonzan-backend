@@ -13,6 +13,8 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ChatModule } from './chat/chat.module';
+import { AdminAccountsModule } from './admin-accounts/admin-accounts.module';
+import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
 import { AdminProductReviewModule } from './admin-product-review/admin-product-review.module';
 import { ProductReviewsModule } from './product-reviews/product-reviews.module';
 import { AdminReviewsModule } from './admin-reviews/admin-reviews.module';
@@ -36,6 +38,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     CategoriesModule,
     OrdersModule,
     PaymentsModule,
+    AdminAccountsModule,
+    AdminDashboardModule,
     AdminProductReviewModule,
     ChatModule,
     ProductReviewsModule,
@@ -48,5 +52,4 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
-
+export class AppModule {}

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   ForbiddenException,
   Injectable,
@@ -37,8 +38,13 @@ export class AdminReviewsService {
         is_hidden,
         hidden_at,
         reported_at,
+        reported_by_user_id,
         report_reason,
         report_status,
+        reporter:user_profiles!reviews_reported_by_user_id_fkey (
+          full_name,
+          email
+        ),
         renter_profiles (
           user_profiles (
             full_name,
@@ -64,9 +70,7 @@ export class AdminReviewsService {
     ];
     const productsById = await this.getProductsById(productIds);
     const shopsById = await this.getShopsById(
-      (data ?? [])
-        .map((review) => review.reviewer_shop_id)
-        .filter(Boolean),
+      (data ?? []).map((review) => review.reviewer_shop_id).filter(Boolean),
     );
 
     return (data ?? []).map((review: any) => {
@@ -89,9 +93,13 @@ export class AdminReviewsService {
         is_hidden: Boolean(review.is_hidden),
         hidden_at: review.hidden_at,
         reported_at: review.reported_at,
+        reported_by_user_id: review.reported_by_user_id,
         report_reason: review.report_reason,
         report_status: review.report_status,
-        reviewer_name: reviewerShopName || userProfile?.full_name || 'Người thuê Amonzan',
+        reporter_name: review.reporter?.full_name ?? null,
+        reporter_email: review.reporter?.email ?? null,
+        reviewer_name:
+          reviewerShopName || userProfile?.full_name || 'Người thuê Amonzan',
         reviewer_email: userProfile?.email ?? null,
         product: productsById.get(review.target_id) ?? null,
       };
@@ -108,6 +116,10 @@ export class AdminReviewsService {
         is_hidden: true,
         hidden_at: new Date().toISOString(),
         hidden_by: adminProfile.user_id,
+        report_status:
+          review.report_status === 'PENDING'
+            ? 'RESOLVED'
+            : review.report_status,
         updated_at: new Date().toISOString(),
       })
       .eq('review_id', reviewId)
@@ -122,6 +134,35 @@ export class AdminReviewsService {
 
     if (review.target_type === 'PRODUCT') {
       await this.productReviewsService.refreshProductRating(review.target_id);
+    }
+
+    return { success: true };
+  }
+
+  async updateReportStatus(
+    authUserId: string,
+    reviewId: string,
+    status: 'RESOLVED' | 'DISMISSED',
+  ) {
+    await this.ensureAdmin(authUserId);
+    const review = await this.getReview(reviewId);
+
+    if (!review.report_status || review.report_status === 'NONE') {
+      throw new NotFoundException('Đánh giá này chưa có báo cáo cần xử lý.');
+    }
+
+    const { error } = await this.supabase
+      .from('reviews')
+      .update({
+        report_status: status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('review_id', reviewId);
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Không thể cập nhật trạng thái báo cáo: ${error.message}`,
+      );
     }
 
     return { success: true };
@@ -152,7 +193,7 @@ export class AdminReviewsService {
   private async getReview(reviewId: string) {
     const { data, error } = await this.supabase
       .from('reviews')
-      .select('review_id, target_type, target_id')
+      .select('review_id, target_type, target_id, report_status')
       .eq('review_id', reviewId)
       .single();
 
@@ -242,7 +283,9 @@ export class AdminReviewsService {
     const roles =
       profile.user_roles
         ?.map((userRole: any) => {
-          const role = Array.isArray(userRole.roles) ? userRole.roles[0] : userRole.roles;
+          const role = Array.isArray(userRole.roles)
+            ? userRole.roles[0]
+            : userRole.roles;
           return role?.role_name;
         })
         .filter(Boolean) ?? [];
