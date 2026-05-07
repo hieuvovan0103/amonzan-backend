@@ -36,14 +36,17 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     CategoriesModule,
     OrdersModule,
     PaymentsModule,
+    AdminProductReviewModule,
     ChatModule,
     ProductReviewsModule,
+    AdminReviewsModule,
     ReviewsModule,
     NotificationsModule,
     ReturnsModule,
     AdminDisputesModule,
   ],
   controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule { }
 
