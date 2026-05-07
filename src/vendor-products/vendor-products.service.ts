@@ -4,12 +4,16 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { CategoriesService } from '../modules/categories/categories.service';
 import { CreateVendorProductDto } from './dto/create-vendor-product.dto';
 import { UpdateVendorProductDto } from './dto/update-vendor-product.dto';
 
 @Injectable()
 export class VendorProductsService {
-    constructor(private readonly supabaseService: SupabaseService) { }
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly categoriesService: CategoriesService,
+    ) { }
 
     private get supabase() {
         return this.supabaseService.client;
@@ -151,16 +155,22 @@ export class VendorProductsService {
 
     async createProduct(authUserId: string, dto: CreateVendorProductDto) {
         const shop = await this.getCurrentVendorShop(authUserId);
+        await this.categoriesService.assertActiveCategory(dto.category_id);
+
+        if (!dto.images?.length) {
+            throw new BadRequestException('Vui lòng tải lên ít nhất một ảnh sản phẩm.');
+        }
 
         const { data: product, error: productError } = await this.supabase
             .from('products')
             .insert({
                 shop_id: shop.shop_id,
-                category_id: dto.category_id ?? null,
+                category_id: dto.category_id,
                 name: dto.name,
                 slug: dto.slug,
                 description: dto.description ?? null,
-                status: dto.status ?? 'DRAFT',
+                status: 'DRAFT',
+                rejection_reason: null,
             })
             .select('*')
             .single();
@@ -195,7 +205,7 @@ export class VendorProductsService {
                     variant_name: variant.variant_name,
                     base_daily_rate: variant.base_daily_rate,
                     base_weekly_rate: variant.base_weekly_rate ?? null,
-                    deposit_requirement: variant.deposit_requirement ?? 0,
+                    deposit_requirement: 0,
                     condition: variant.condition ?? 'NEW',
                     total_stock: variant.total_stock,
                     available_stock: variant.total_stock,
@@ -248,11 +258,20 @@ export class VendorProductsService {
         dto: UpdateVendorProductDto,
     ) {
         const shop = await this.getCurrentVendorShop(authUserId);
+        await this.ensureProductCanBeEdited(productId, shop.shop_id);
+
+        if (dto.category_id !== undefined) {
+            await this.categoriesService.assertActiveCategory(dto.category_id);
+        }
+
+        const updates = Object.fromEntries(
+            Object.entries(dto).filter(([, value]) => value !== undefined),
+        );
 
         const { data, error } = await this.supabase
             .from('products')
             .update({
-                ...dto,
+                ...updates,
                 updated_at: new Date().toISOString(),
             })
             .eq('product_id', productId)
@@ -270,8 +289,97 @@ export class VendorProductsService {
     async updateProductStatus(
         authUserId: string,
         productId: string,
-        status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED',
+        status: 'DRAFT' | 'ARCHIVED',
     ) {
-        return this.updateProduct(authUserId, productId, { status });
+        const shop = await this.getCurrentVendorShop(authUserId);
+        const { data: product, error: fetchError } = await this.supabase
+            .from('products')
+            .select('product_id, status')
+            .eq('product_id', productId)
+            .eq('shop_id', shop.shop_id)
+            .single();
+
+        if (fetchError || !product) {
+            throw new NotFoundException('Không tìm thấy sản phẩm');
+        }
+
+        if (product.status === 'PENDING_REVIEW') {
+            throw new BadRequestException('Sản phẩm đang chờ duyệt nên không thể đổi trạng thái.');
+        }
+
+        const { data, error } = await this.supabase
+            .from('products')
+            .update({
+                status,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('product_id', productId)
+            .eq('shop_id', shop.shop_id)
+            .select('*')
+            .single();
+
+        if (error || !data) {
+            throw new BadRequestException(error?.message || 'Cập nhật trạng thái sản phẩm thất bại');
+        }
+
+        return this.getProductDetail(authUserId, productId);
+    }
+
+    async submitProductForReview(authUserId: string, productId: string) {
+        const shop = await this.getCurrentVendorShop(authUserId);
+
+        const { data: product, error: fetchError } = await this.supabase
+            .from('products')
+            .select('product_id, status')
+            .eq('product_id', productId)
+            .eq('shop_id', shop.shop_id)
+            .single();
+
+        if (fetchError || !product) {
+            throw new NotFoundException('Không tìm thấy sản phẩm');
+        }
+
+        if (!['DRAFT', 'REJECTED'].includes(product.status)) {
+            throw new BadRequestException('Chỉ sản phẩm bản nháp hoặc bị từ chối mới có thể gửi duyệt.');
+        }
+
+        const { error } = await this.supabase
+            .from('products')
+            .update({
+                status: 'PENDING_REVIEW',
+                rejection_reason: null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('product_id', productId)
+            .eq('shop_id', shop.shop_id);
+
+        if (error) {
+            throw new BadRequestException(error.message || 'Gửi duyệt sản phẩm thất bại');
+        }
+
+        return this.getProductDetail(authUserId, productId);
+    }
+
+    private async ensureProductCanBeEdited(productId: string, shopId: string) {
+        const { data: product, error } = await this.supabase
+            .from('products')
+            .select('product_id, status')
+            .eq('product_id', productId)
+            .eq('shop_id', shopId)
+            .single();
+
+        if (error || !product) {
+            throw new NotFoundException('Không tìm thấy sản phẩm');
+        }
+
+        if (product.status === 'PENDING_REVIEW') {
+            throw new BadRequestException('Sản phẩm đang chờ duyệt nên không thể chỉnh sửa.');
+        }
+
+        if (product.status === 'APPROVED') {
+            throw new BadRequestException('Sản phẩm đã được duyệt. Hãy chuyển về bản nháp trước khi chỉnh sửa.');
+        }
+
+        return product;
     }
 }

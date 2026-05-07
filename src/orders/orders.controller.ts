@@ -3,6 +3,10 @@ import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagg
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import { SupabaseAuthGuard } from "../auth/guards/supabase-auth.guard";
 import { CreateOrderDto } from "./dto/create-order.dto";
+import { ConfirmReturnReceivedDto } from "./dto/confirm-return-received.dto";
+import { EarlyReturnRequestDto } from "./dto/early-return-request.dto";
+import { RejectEarlyReturnDto } from "./dto/reject-early-return.dto";
+import { VendorRenterReviewDto } from "./dto/vendor-renter-review.dto";
 import { OrdersService } from "./orders.service";
 
 @ApiTags("orders")
@@ -19,6 +23,12 @@ export class OrdersController {
         return this.ordersService.createOrder(user.id, dto);
     }
 
+    @Get("my-paid-orders")
+    @ApiOperation({ summary: "List paid rental orders for the authenticated user." })
+    getMyPaidOrders(@CurrentUser() user: any) {
+        return this.ordersService.getMyPaidOrders(user.id);
+    }
+
     @Get("vendor")
     @ApiOperation({ summary: "List rental orders for the authenticated vendor." })
     getVendorOrders(
@@ -26,6 +36,74 @@ export class OrdersController {
         @Query("status") status?: string,
     ) {
         return this.ordersService.getVendorOrders(user.id, status);
+    }
+
+    @Get("vendor/early-return-requests")
+    @ApiOperation({ summary: "List early return requests for the authenticated vendor." })
+    getVendorEarlyReturnRequests(@CurrentUser() user: any) {
+        return this.ordersService.getVendorEarlyReturnRequests(user.id);
+    }
+
+    @Get(":orderId/early-return/estimate-refund")
+    @ApiOperation({ summary: "Estimate refund amount for early return." })
+    estimateEarlyReturnRefund(
+        @CurrentUser() user: any,
+        @Param("orderId") orderId: string,
+        @Query("requestedReturnAt") requestedReturnAt: string,
+    ) {
+        return this.ordersService.estimateEarlyReturnRefund(user.id, orderId, requestedReturnAt);
+    }
+
+    @Post(":orderId/early-return/request")
+    @ApiOperation({ summary: "Request early return for a rental order." })
+    requestEarlyReturn(
+        @CurrentUser() user: any,
+        @Param("orderId") orderId: string,
+        @Body() dto: EarlyReturnRequestDto,
+    ) {
+        return this.ordersService.requestEarlyReturn(user.id, orderId, dto);
+    }
+
+    @Patch(":orderId/confirm-received")
+    @ApiOperation({ summary: "Confirm that the renter has received the rental items." })
+    confirmRenterReceived(@CurrentUser() user: any, @Param("orderId") orderId: string) {
+        return this.ordersService.confirmRenterReceived(user.id, orderId);
+    }
+
+    @Patch("vendor/:orderId/early-return/approve")
+    @ApiOperation({ summary: "Approve an early return request as vendor." })
+    approveEarlyReturn(@CurrentUser() user: any, @Param("orderId") orderId: string) {
+        return this.ordersService.approveEarlyReturn(user.id, orderId);
+    }
+
+    @Patch("vendor/:orderId/early-return/reject")
+    @ApiOperation({ summary: "Reject an early return request as vendor." })
+    rejectEarlyReturn(
+        @CurrentUser() user: any,
+        @Param("orderId") orderId: string,
+        @Body() dto: RejectEarlyReturnDto,
+    ) {
+        return this.ordersService.rejectEarlyReturn(user.id, orderId, dto.reason);
+    }
+
+    @Patch("vendor/:orderId/return/confirm-received")
+    @ApiOperation({ summary: "Confirm returned goods were received as vendor." })
+    confirmReturnReceived(
+        @CurrentUser() user: any,
+        @Param("orderId") orderId: string,
+        @Body() dto: ConfirmReturnReceivedDto,
+    ) {
+        return this.ordersService.confirmReturnReceived(user.id, orderId, dto);
+    }
+
+    @Post("vendor/:orderId/renter-review")
+    @ApiOperation({ summary: "Create or update a vendor review for the renter after return." })
+    reviewRenter(
+        @CurrentUser() user: any,
+        @Param("orderId") orderId: string,
+        @Body() dto: VendorRenterReviewDto,
+    ) {
+        return this.ordersService.reviewRenter(user.id, orderId, dto);
     }
 
     @Patch(":orderId/vendor-approve")

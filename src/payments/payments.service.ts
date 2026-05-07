@@ -3,6 +3,8 @@ import {
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
+import { NotificationTypes } from "../modules/notifications/notification-types";
+import { OrderNotificationService } from "../orders/order-notification.service";
 import { SupabaseService } from "../supabase/supabase.service";
 import { VnpayProvider } from "./providers/vnpay.provider";
 import type { PaymentStatusResponseDto } from "./dto/payment-status-response.dto";
@@ -10,8 +12,20 @@ import type { PaymentStatusResponseDto } from "./dto/payment-status-response.dto
 @Injectable()
 export class PaymentsService {
     private readonly vnpayProvider = new VnpayProvider();
+    private readonly bookedOrderStatuses = [
+        "PENDING_VENDOR_APPROVAL",
+        "CONFIRMED",
+        "READY_FOR_PICKUP",
+        "IN_RENTAL",
+        "RETURN_PENDING",
+        "LATE",
+        "DISPUTED",
+    ];
 
-    constructor(private readonly supabaseService: SupabaseService) { }
+    constructor(
+        private readonly supabaseService: SupabaseService,
+        private readonly orderNotificationService: OrderNotificationService,
+    ) { }
 
     async createVnpayPaymentUrl(orderId: string, ipAddress: string) {
         const supabase = this.supabaseService.client;
@@ -156,6 +170,11 @@ export class PaymentsService {
                     payment_status: "FAILED",
                 })
                 .eq("order_id", payment.order_id);
+
+            await this.orderNotificationService.notifyOrderEvent(
+                payment.order_id,
+                NotificationTypes.PaymentFailed,
+            );
 
             return {
                 RspCode: "00",
@@ -303,7 +322,7 @@ export class PaymentsService {
             };
         }
 
-        const stockResult = await this.decreaseStockAfterPayment(payment.order_id);
+        const stockResult = await this.validateOrderAvailabilityBeforePayment(payment.order_id);
 
         if (!stockResult.ok) {
             await supabase
@@ -349,14 +368,41 @@ export class PaymentsService {
             };
         }
 
+        await this.orderNotificationService.notifyOrderEvent(
+            payment.order_id,
+            NotificationTypes.OrderPaid,
+        );
+
         return {
             ok: true,
             message: "Confirm success",
         };
     }
 
-    private async decreaseStockAfterPayment(orderId: string) {
+    private async validateOrderAvailabilityBeforePayment(orderId: string) {
         const supabase = this.supabaseService.client;
+
+        const { data: order, error: orderError } = await supabase
+            .from("rental_orders")
+            .select("order_id, rental_start, rental_end")
+            .eq("order_id", orderId);
+
+        if (orderError || !order?.length) {
+            return {
+                ok: false,
+                message: "Không thể lấy thông tin lịch thuê của đơn",
+            };
+        }
+
+        const rentalStart = this.normalizeDate(order[0].rental_start);
+        const rentalEnd = this.normalizeDate(order[0].rental_end);
+
+        if (!rentalStart || !rentalEnd) {
+            return {
+                ok: false,
+                message: "Ngày thuê của đơn không hợp lệ",
+            };
+        }
 
         const { data: items, error: itemsError } = await supabase
             .from("rental_order_items")
@@ -373,7 +419,7 @@ export class PaymentsService {
         for (const item of items) {
             const { data: variant, error: variantError } = await supabase
                 .from("product_variants")
-                .select("variant_id, available_stock")
+                .select("variant_id, total_stock, available_stock")
                 .eq("variant_id", item.variant_id)
                 .single();
 
@@ -384,27 +430,23 @@ export class PaymentsService {
                 };
             }
 
-            const nextStock =
-                Number(variant.available_stock || 0) - Number(item.quantity || 0);
+            const bookedQuantity = await this.getBookedQuantity(
+                item.variant_id,
+                rentalStart,
+                rentalEnd,
+            );
+            const availableStock = Math.max(
+                0,
+                Math.min(
+                    Number(variant.total_stock || 0),
+                    Number(variant.available_stock || 0),
+                ) - bookedQuantity,
+            );
 
-            if (nextStock < 0) {
+            if (availableStock < Number(item.quantity || 0)) {
                 return {
                     ok: false,
-                    message: `Biến thể ${item.variant_id} không còn đủ tồn kho`,
-                };
-            }
-
-            const { error: updateStockError } = await supabase
-                .from("product_variants")
-                .update({
-                    available_stock: nextStock,
-                })
-                .eq("variant_id", item.variant_id);
-
-            if (updateStockError) {
-                return {
-                    ok: false,
-                    message: `Không thể cập nhật tồn kho cho ${item.variant_id}`,
+                    message: `Biến thể ${item.variant_id} không khả dụng trong thời gian đã chọn`,
                 };
             }
         }
@@ -413,5 +455,45 @@ export class PaymentsService {
             ok: true,
             message: "OK",
         };
+    }
+
+    private normalizeDate(value: string) {
+        const date = new Date(value);
+
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+
+        return date.toISOString().slice(0, 10);
+    }
+
+    private async getBookedQuantity(variantId: string, start: string, end: string) {
+        const supabase = this.supabaseService.client;
+
+        const { data, error } = await supabase
+            .from("rental_order_items")
+            .select(
+                `
+                quantity,
+                rental_orders!inner (
+                    status,
+                    rental_start,
+                    rental_end
+                )
+            `,
+            )
+            .eq("variant_id", variantId)
+            .in("rental_orders.status", this.bookedOrderStatuses)
+            .lt("rental_orders.rental_start", end)
+            .gt("rental_orders.rental_end", start);
+
+        if (error) {
+            return 0;
+        }
+
+        return (data ?? []).reduce(
+            (sum, item) => sum + Number(item.quantity || 0),
+            0,
+        );
     }
 }

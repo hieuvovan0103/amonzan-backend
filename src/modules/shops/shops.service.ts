@@ -63,7 +63,7 @@ export class ShopsService {
                     { count: 'exact' },
                 )
                 .eq('shop_id', shopId)
-                .eq('status', 'ACTIVE')
+                .eq('status', 'APPROVED')
                 .order('name', { ascending: true });
 
         if (productsError) {

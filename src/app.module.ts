@@ -13,6 +13,13 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ChatModule } from './chat/chat.module';
+import { AdminProductReviewModule } from './admin-product-review/admin-product-review.module';
+import { ProductReviewsModule } from './product-reviews/product-reviews.module';
+import { AdminReviewsModule } from './admin-reviews/admin-reviews.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { ReturnsModule } from './returns/returns.module';
+import { AdminDisputesModule } from './admin-disputes/admin-disputes.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -30,9 +37,13 @@ import { ChatModule } from './chat/chat.module';
     OrdersModule,
     PaymentsModule,
     ChatModule,
+    ProductReviewsModule,
+    ReviewsModule,
+    NotificationsModule,
+    ReturnsModule,
+    AdminDisputesModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule { }
 
