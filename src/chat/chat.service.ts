@@ -26,8 +26,6 @@ const MAX_MESSAGES = 12;
 const MAX_MESSAGE_LENGTH = 1200;
 const DEFAULT_GEMINI_MODELS = [
   'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
 ];
 
 @Injectable()
