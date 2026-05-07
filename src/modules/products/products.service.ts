@@ -15,6 +15,8 @@ import {
 export class ProductsService {
     constructor(private readonly supabase: SupabaseService) { }
 
+    private readonly minSearchTokenLength = 2;
+
     private readonly bookedOrderStatuses = [
         'PENDING_VENDOR_APPROVAL',
         'CONFIRMED',
@@ -33,6 +35,7 @@ export class ProductsService {
         );
 
         const categorySlug = query.categorySlug ?? query.category;
+        const search = this.normalizeSearchQuery(query.search ?? query.keyword);
 
         let request = client
             .from('products')
@@ -83,11 +86,7 @@ export class ProductsService {
             .eq('status', 'APPROVED')
             .eq('categories.is_active', true)
             .eq('shop_profiles.is_active', true)
-            .gt('product_variants.total_stock', 0);
-
-        if (query.keyword) {
-            request = request.ilike('name', `%${query.keyword}%`);
-        }
+            .gt('product_variants.available_stock', 0);
 
         if (query.categoryId) {
             request = request.eq('category_id', query.categoryId);
@@ -119,7 +118,7 @@ export class ProductsService {
             request = request.order('created_at', { ascending: false });
         }
 
-        if (query.sort !== 'price_asc' && query.sort !== 'price_desc') {
+        if (!search && query.sort !== 'price_asc' && query.sort !== 'price_desc') {
             request = request.range(from, to);
         }
 
@@ -131,20 +130,37 @@ export class ProductsService {
 
         const filteredData = this.applyVariantFilters(data ?? [], query);
 
-        const mappedData = filteredData.map((product) =>
-            this.mapProductCard(product),
-        );
+        const mappedData = filteredData
+            .map((product) => this.mapProductCard(product))
+            .filter((product) => !search || this.getSearchScore(product, search) > 0);
 
-        if (query.sort === 'price_asc') {
+        if (search) {
+            mappedData.sort((a, b) => {
+                const scoreDiff =
+                    this.getSearchScore(b, search) - this.getSearchScore(a, search);
+
+                if (scoreDiff !== 0) return scoreDiff;
+
+                const ratingDiff =
+                    Number(b.average_rating ?? 0) - Number(a.average_rating ?? 0);
+
+                if (ratingDiff !== 0) return ratingDiff;
+
+                return (
+                    new Date(b.created_at).getTime() -
+                    new Date(a.created_at).getTime()
+                );
+            });
+        } else if (query.sort === 'price_asc') {
             mappedData.sort((a, b) => a.min_daily_rate - b.min_daily_rate);
         }
 
-        if (query.sort === 'price_desc') {
+        if (!search && query.sort === 'price_desc') {
             mappedData.sort((a, b) => b.min_daily_rate - a.min_daily_rate);
         }
 
         const pagedData =
-            query.sort === 'price_asc' || query.sort === 'price_desc'
+            search || query.sort === 'price_asc' || query.sort === 'price_desc'
                 ? mappedData.slice(from, to + 1)
                 : mappedData;
 
@@ -153,7 +169,7 @@ export class ProductsService {
             pagination: buildPaginationMeta({
                 page,
                 limit,
-                total: count ?? mappedData.length,
+                total: search ? mappedData.length : count ?? mappedData.length,
             }),
         };
     }
@@ -264,9 +280,14 @@ export class ProductsService {
 
     async checkAvailability(slug: string, query: ProductAvailabilityQueryDto) {
         const product = await this.findActiveProductVariant(slug, query.variantId);
+        const effectiveStock = Math.min(
+            Number(product.variant.total_stock ?? 0),
+            Number(product.variant.available_stock ?? 0),
+        );
+
         return this.getVariantAvailability({
             variantId: query.variantId,
-            totalStock: Number(product.variant.total_stock ?? 0),
+            totalStock: effectiveStock,
             start: query.start,
             end: query.end,
         });
@@ -287,7 +308,8 @@ export class ProductsService {
         ),
         product_variants!inner (
           variant_id,
-          total_stock
+          total_stock,
+          available_stock
         )
       `,
             )
@@ -438,7 +460,7 @@ export class ProductsService {
             const variants = product.product_variants ?? [];
 
             const availableVariants = variants.filter(
-                (variant) => Number(variant.total_stock) > 0,
+                (variant) => Number(variant.available_stock ?? 0) > 0,
             );
 
             if (availableVariants.length === 0) {
@@ -473,6 +495,62 @@ export class ProductsService {
         });
     }
 
+    private normalizeSearchQuery(value?: string | null) {
+        const phrase = value?.trim().toLowerCase().replace(/\s+/g, ' ');
+
+        if (!phrase) return null;
+
+        const tokens = Array.from(
+            new Set(
+                phrase
+                    .split(' ')
+                    .map((token) => token.trim())
+                    .filter((token) => token.length >= this.minSearchTokenLength),
+            ),
+        );
+
+        if (phrase.length < this.minSearchTokenLength && tokens.length === 0) {
+            return null;
+        }
+
+        return { phrase, tokens };
+    }
+
+    private getSearchScore(
+        product: ReturnType<ProductsService['mapProductCard']>,
+        search: { phrase: string; tokens: string[] },
+    ) {
+        const name = this.normalizeSearchableText(product.name);
+        const description = this.normalizeSearchableText(product.description);
+        const category = this.normalizeSearchableText(product.category?.name);
+        const shopName = this.normalizeSearchableText(product.shop?.shop_name);
+        const variantNames = this.normalizeSearchableText(
+            product.variant_names?.join(' '),
+        );
+
+        let score = 0;
+
+        if (name.includes(search.phrase)) score += 100;
+        if (description.includes(search.phrase)) score += 35;
+        if (category.includes(search.phrase)) score += 45;
+        if (shopName.includes(search.phrase)) score += 25;
+        if (variantNames.includes(search.phrase)) score += 40;
+
+        search.tokens.forEach((token) => {
+            if (name.includes(token)) score += 50;
+            if (category.includes(token)) score += 30;
+            if (variantNames.includes(token)) score += 25;
+            if (description.includes(token)) score += 20;
+            if (shopName.includes(token)) score += 10;
+        });
+
+        return score + Number(product.average_rating ?? 0);
+    }
+
+    private normalizeSearchableText(value?: string | null) {
+        return value?.toLowerCase().replace(/\s+/g, ' ').trim() ?? '';
+    }
+
     private mapProductCard(product: any) {
         const images = product.product_images ?? [];
         const variants = product.product_variants ?? [];
@@ -482,7 +560,7 @@ export class ProductsService {
             images.sort((a, b) => a.sort_order - b.sort_order)[0];
 
         const availableVariants = variants.filter(
-            (variant) => Number(variant.total_stock) > 0,
+            (variant) => Number(variant.available_stock ?? 0) > 0,
         );
 
         const minDailyRate =
@@ -495,7 +573,7 @@ export class ProductsService {
                 : 0;
 
         const availableStock = availableVariants.reduce(
-            (total, variant) => total + Number(variant.total_stock),
+            (total, variant) => total + Number(variant.available_stock ?? 0),
             0,
         );
 
@@ -507,6 +585,7 @@ export class ProductsService {
             average_rating: product.average_rating,
             category: product.categories,
             shop: product.shop_profiles,
+            variant_names: variants.map((variant) => variant.variant_name).filter(Boolean),
             primary_image_url: primaryImage?.image_url ?? null,
             min_daily_rate: minDailyRate,
             available_stock: availableStock,

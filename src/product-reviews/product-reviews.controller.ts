@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { SupabaseAuthGuard } from '../auth/guards/supabase-auth.guard';
@@ -35,5 +35,17 @@ export class ProductReviewsController {
     @Body() dto: CreateProductReviewDto,
   ) {
     return this.service.create(user.id, productId, dto);
+  }
+
+  @Patch('mine')
+  @ApiBearerAuth()
+  @UseGuards(SupabaseAuthGuard)
+  @ApiOperation({ summary: 'Update current user product review.' })
+  updateMine(
+    @CurrentUser() user: any,
+    @Param('productId') productId: string,
+    @Body() dto: CreateProductReviewDto,
+  ) {
+    return this.service.updateMine(user.id, productId, dto);
   }
 }

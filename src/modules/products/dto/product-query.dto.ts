@@ -4,10 +4,15 @@ import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ProductQueryDto extends PaginationQueryDto {
-    @ApiPropertyOptional({ description: 'Search keyword matched against product name.' })
+    @ApiPropertyOptional({ description: 'Search keyword matched against product name or description.' })
     @IsOptional()
     @IsString()
     keyword?: string;
+
+    @ApiPropertyOptional({ description: 'Alias for keyword.' })
+    @IsOptional()
+    @IsString()
+    search?: string;
 
     @ApiPropertyOptional({ format: 'uuid', description: 'Filter by category id.' })
     @IsOptional()

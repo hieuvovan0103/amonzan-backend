@@ -6,6 +6,7 @@ import { CreateOrderDto } from "./dto/create-order.dto";
 import { ConfirmReturnReceivedDto } from "./dto/confirm-return-received.dto";
 import { EarlyReturnRequestDto } from "./dto/early-return-request.dto";
 import { RejectEarlyReturnDto } from "./dto/reject-early-return.dto";
+import { VendorRenterReviewDto } from "./dto/vendor-renter-review.dto";
 import { OrdersService } from "./orders.service";
 
 @ApiTags("orders")
@@ -93,6 +94,16 @@ export class OrdersController {
         @Body() dto: ConfirmReturnReceivedDto,
     ) {
         return this.ordersService.confirmReturnReceived(user.id, orderId, dto);
+    }
+
+    @Post("vendor/:orderId/renter-review")
+    @ApiOperation({ summary: "Create or update a vendor review for the renter after return." })
+    reviewRenter(
+        @CurrentUser() user: any,
+        @Param("orderId") orderId: string,
+        @Body() dto: VendorRenterReviewDto,
+    ) {
+        return this.ordersService.reviewRenter(user.id, orderId, dto);
     }
 
     @Patch(":orderId/vendor-approve")

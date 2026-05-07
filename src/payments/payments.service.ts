@@ -404,7 +404,7 @@ export class PaymentsService {
         for (const item of items) {
             const { data: variant, error: variantError } = await supabase
                 .from("product_variants")
-                .select("variant_id, total_stock")
+                .select("variant_id, total_stock, available_stock")
                 .eq("variant_id", item.variant_id)
                 .single();
 
@@ -422,7 +422,10 @@ export class PaymentsService {
             );
             const availableStock = Math.max(
                 0,
-                Number(variant.total_stock || 0) - bookedQuantity,
+                Math.min(
+                    Number(variant.total_stock || 0),
+                    Number(variant.available_stock || 0),
+                ) - bookedQuantity,
             );
 
             if (availableStock < Number(item.quantity || 0)) {

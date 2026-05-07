@@ -9,6 +9,7 @@ import { SupabaseService } from "../supabase/supabase.service";
 import { ConfirmReturnReceivedDto } from "./dto/confirm-return-received.dto";
 import { CreateOrderDto } from "./dto/create-order.dto";
 import { EarlyReturnRequestDto } from "./dto/early-return-request.dto";
+import { VendorRenterReviewDto } from "./dto/vendor-renter-review.dto";
 import type { CreateOrderResponseDto } from "./dto/create-order-response.dto";
 import type { MyOrdersResponseDto } from "./dto/my-orders-response.dto";
 
@@ -266,8 +267,8 @@ export class OrdersService {
         }
 
         return {
-            orders: (orders ?? []).map((order: any) =>
-                this.mapVendorOrder(order, shop.shop_id),
+            orders: await Promise.all(
+                (orders ?? []).map((order: any) => this.mapVendorOrder(order, shop.shop_id)),
             ),
         };
     }
@@ -384,7 +385,7 @@ export class OrdersService {
         }
 
         return {
-            orders: (orders ?? []).map((order: any) => this.mapMyOrder(order)),
+            orders: await Promise.all((orders ?? []).map((order: any) => this.mapMyOrder(order))),
         };
     }
 
@@ -573,6 +574,7 @@ export class OrdersService {
                     subtotal,
                     total_amount,
                     renter_profiles (
+                        renter_profile_id,
                         reputation_score,
                         penalty_points,
                         user_profiles (
@@ -612,8 +614,10 @@ export class OrdersService {
         }
 
         return {
-            requests: (data ?? []).map((request: any) =>
-                this.mapVendorEarlyReturnRequest(request, shop.shop_id),
+            requests: await Promise.all(
+                (data ?? []).map((request: any) =>
+                    this.mapVendorEarlyReturnRequest(request, shop.shop_id),
+                ),
             ),
         };
     }
@@ -832,6 +836,71 @@ export class OrdersService {
         }
 
         return { orderId, status: "CONFIRMED", message: "Đã chấp nhận đơn thuê" };
+    }
+
+    async reviewRenter(
+        authUserId: string | undefined,
+        orderId: string,
+        dto: VendorRenterReviewDto,
+    ) {
+        if (!authUserId) {
+            throw new UnauthorizedException("Bạn cần đăng nhập để đánh giá người thuê");
+        }
+
+        const supabase = this.supabaseService.client;
+        const shop = await this.getVendorShop(authUserId);
+        await this.assertVendorOwnsOrder(authUserId, orderId);
+
+        const { data: order, error: orderError } = await supabase
+            .from("rental_orders")
+            .select("order_id, status, renter_profile_id")
+            .eq("order_id", orderId)
+            .single();
+
+        if (orderError || !order) {
+            throw new NotFoundException("Không tìm thấy đơn thuê");
+        }
+
+        if (order.status !== "COMPLETED") {
+            throw new BadRequestException("Chỉ có thể đánh giá người thuê sau khi đã nhận hàng trả về.");
+        }
+
+        const { data, error } = await supabase
+            .from("reviews")
+            .upsert(
+                {
+                    reviewer_shop_id: shop.shop_id,
+                    renter_profile_id: null,
+                    order_id: orderId,
+                    target_type: "RENTER",
+                    target_id: order.renter_profile_id,
+                    rating: dto.rating,
+                    comment: dto.comment?.trim() || null,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: "reviewer_shop_id,order_id,target_type,target_id" },
+            )
+            .select(
+                `
+                review_id,
+                order_id,
+                target_type,
+                target_id,
+                rating,
+                comment,
+                created_at,
+                is_hidden,
+                reviewer_shop_id
+            `,
+            )
+            .single();
+
+        if (error || !data) {
+            throw new BadRequestException(`Không thể lưu đánh giá người thuê: ${error?.message ?? "Unknown error"}`);
+        }
+
+        const reviews = await this.attachRenterReviewShopNames([data]);
+        return this.mapRenterReview(reviews[0]);
     }
 
     private async getUserProfile(authUserId: string) {
@@ -1146,7 +1215,10 @@ export class OrdersService {
             );
             const availability = await this.getVariantAvailability({
                 variantId: item.variantId,
-                totalStock: Number(variant.total_stock || 0),
+                totalStock: Math.min(
+                    Number(variant.total_stock || 0),
+                    Number(variant.available_stock || 0),
+                ),
                 rentalStart: item.rentalStart,
                 rentalEnd: item.rentalEnd,
             });
@@ -1363,7 +1435,129 @@ export class OrdersService {
             .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
     }
 
-    private mapVendorOrder(order: any, shopId: string) {
+    private async getRenterReviewHistory(renterProfileId?: string | null) {
+        if (!renterProfileId) {
+            return { summary: { averageRating: 0, count: 0 }, reviews: [] };
+        }
+
+        const { data, error } = await this.supabaseService.client
+            .from("reviews")
+            .select(
+                `
+                review_id,
+                order_id,
+                target_type,
+                target_id,
+                rating,
+                comment,
+                created_at,
+                is_hidden,
+                reviewer_shop_id
+            `,
+            )
+            .eq("target_type", "RENTER")
+            .eq("target_id", renterProfileId)
+            .eq("is_hidden", false)
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+        if (error) {
+            console.warn("[orders] Unable to load renter review history:", error.message);
+            return { summary: { averageRating: 0, count: 0 }, reviews: [] };
+        }
+
+        const reviewsWithShopNames = await this.attachRenterReviewShopNames(data ?? []);
+        const reviews = reviewsWithShopNames.map((review: any) => this.mapRenterReview(review));
+        const averageRating = reviews.length
+            ? Number((reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / reviews.length).toFixed(2))
+            : 0;
+
+        return {
+            summary: { averageRating, count: reviews.length },
+            reviews,
+        };
+    }
+
+    private mapRenterReview(review: any) {
+        const shop = Array.isArray(review.shop_profiles)
+            ? review.shop_profiles[0]
+            : review.shop_profiles;
+
+        return {
+            reviewId: review.review_id,
+            orderId: review.order_id,
+            rating: Number(review.rating ?? 0),
+            comment: review.comment,
+            createdAt: review.created_at,
+            shopName: review.shopName ?? shop?.shop_name ?? "Cửa hàng Amonzan",
+        };
+    }
+
+    private async getOrderRenterReview(orderId: string) {
+        const { data, error } = await this.supabaseService.client
+            .from("reviews")
+            .select(
+                `
+                review_id,
+                order_id,
+                target_type,
+                target_id,
+                rating,
+                comment,
+                created_at,
+                is_hidden,
+                report_status,
+                reviewer_shop_id
+            `,
+            )
+            .eq("target_type", "RENTER")
+            .eq("order_id", orderId)
+            .eq("is_hidden", false)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error || !data) {
+            return null;
+        }
+
+        const reviews = await this.attachRenterReviewShopNames([data]);
+
+        return {
+            ...this.mapRenterReview(reviews[0]),
+            reportStatus: data.report_status,
+        };
+    }
+
+    private async attachRenterReviewShopNames(reviews: any[]) {
+        const shopIds = [
+            ...new Set(
+                reviews
+                    .map((review) => review.reviewer_shop_id)
+                    .filter(Boolean),
+            ),
+        ];
+
+        if (shopIds.length === 0) {
+            return reviews;
+        }
+
+        const { data } = await this.supabaseService.client
+            .from("shop_profiles")
+            .select("shop_id, shop_name")
+            .in("shop_id", shopIds);
+
+        const shopsById = new Map(
+            (data ?? []).map((shop: any) => [shop.shop_id, shop.shop_name]),
+        );
+
+        return reviews.map((review) => ({
+            ...review,
+            shopName: shopsById.get(review.reviewer_shop_id) ?? null,
+        }));
+    }
+
+    private async mapVendorOrder(order: any, shopId: string) {
         const renter = Array.isArray(order.renter_profiles)
             ? order.renter_profiles[0]
             : order.renter_profiles;
@@ -1413,6 +1607,8 @@ export class OrdersService {
                 };
             });
 
+        const renterReviews = await this.getRenterReviewHistory(renter?.renter_profile_id);
+
         return {
             orderId: order.order_id,
             status: order.status,
@@ -1434,6 +1630,8 @@ export class OrdersService {
                 reputationScore: Number(renter?.reputation_score ?? 0),
                 penaltyPoints: Number(renter?.penalty_points ?? 0),
                 verificationStatus: renter?.verification_status ?? "PENDING",
+                reviews: renterReviews.reviews,
+                reviewSummary: renterReviews.summary,
             },
             address: address
                 ? {
@@ -1465,7 +1663,7 @@ export class OrdersService {
         };
     }
 
-    private mapMyOrder(order: any) {
+    private async mapMyOrder(order: any) {
         const address = Array.isArray(order.addresses) ? order.addresses[0] : order.addresses;
         const payment = Array.isArray(order.payment_transactions)
             ? order.payment_transactions[0]
@@ -1509,6 +1707,8 @@ export class OrdersService {
             };
         });
 
+        const renterReview = await this.getOrderRenterReview(order.order_id);
+
         return {
             orderId: order.order_id,
             status: order.status,
@@ -1530,6 +1730,7 @@ export class OrdersService {
             returnRecord: returnRecord
                 ? this.mapReturnRecord(returnRecord)
                 : null,
+            renterReview,
             address: address
                 ? {
                       recipientName: address.recipient_name,
@@ -1603,7 +1804,7 @@ export class OrdersService {
         };
     }
 
-    private mapVendorEarlyReturnRequest(request: any, shopId: string) {
+    private async mapVendorEarlyReturnRequest(request: any, shopId: string) {
         const order = Array.isArray(request.rental_orders)
             ? request.rental_orders[0]
             : request.rental_orders;
@@ -1649,6 +1850,8 @@ export class OrdersService {
                 };
             });
 
+        const renterReviews = await this.getRenterReviewHistory(renter?.renter_profile_id);
+
         return {
             ...this.mapEarlyReturnRequest(request),
             order: {
@@ -1666,6 +1869,8 @@ export class OrdersService {
                 phoneNumber: user?.phone_number ?? null,
                 reputationScore: Number(renter?.reputation_score ?? 0),
                 penaltyPoints: Number(renter?.penalty_points ?? 0),
+                reviews: renterReviews.reviews,
+                reviewSummary: renterReviews.summary,
             },
             items,
         };

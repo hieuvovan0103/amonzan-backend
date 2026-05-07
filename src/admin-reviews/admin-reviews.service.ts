@@ -30,11 +30,15 @@ export class AdminReviewsService {
         order_id,
         target_type,
         target_id,
+        reviewer_shop_id,
         rating,
         comment,
         created_at,
         is_hidden,
         hidden_at,
+        reported_at,
+        report_reason,
+        report_status,
         renter_profiles (
           user_profiles (
             full_name,
@@ -59,6 +63,11 @@ export class AdminReviewsService {
       ),
     ];
     const productsById = await this.getProductsById(productIds);
+    const shopsById = await this.getShopsById(
+      (data ?? [])
+        .map((review) => review.reviewer_shop_id)
+        .filter(Boolean),
+    );
 
     return (data ?? []).map((review: any) => {
       const renterProfile = Array.isArray(review.renter_profiles)
@@ -67,6 +76,7 @@ export class AdminReviewsService {
       const userProfile = Array.isArray(renterProfile?.user_profiles)
         ? renterProfile.user_profiles[0]
         : renterProfile?.user_profiles;
+      const reviewerShopName = shopsById.get(review.reviewer_shop_id);
 
       return {
         review_id: review.review_id,
@@ -78,7 +88,10 @@ export class AdminReviewsService {
         created_at: review.created_at,
         is_hidden: Boolean(review.is_hidden),
         hidden_at: review.hidden_at,
-        reviewer_name: userProfile?.full_name || 'Người thuê Amonzan',
+        reported_at: review.reported_at,
+        report_reason: review.report_reason,
+        report_status: review.report_status,
+        reviewer_name: reviewerShopName || userProfile?.full_name || 'Người thuê Amonzan',
         reviewer_email: userProfile?.email ?? null,
         product: productsById.get(review.target_id) ?? null,
       };
@@ -181,6 +194,26 @@ export class AdminReviewsService {
         slug: product.slug,
         shop_name: shop?.shop_name ?? null,
       });
+    });
+
+    return map;
+  }
+
+  private async getShopsById(shopIds: string[]) {
+    const map = new Map<string, string>();
+    const uniqueShopIds = [...new Set(shopIds)];
+
+    if (uniqueShopIds.length === 0) {
+      return map;
+    }
+
+    const { data } = await this.supabase
+      .from('shop_profiles')
+      .select('shop_id, shop_name')
+      .in('shop_id', uniqueShopIds);
+
+    (data ?? []).forEach((shop) => {
+      map.set(shop.shop_id, shop.shop_name);
     });
 
     return map;

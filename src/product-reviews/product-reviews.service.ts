@@ -18,6 +18,7 @@ type ProductReviewRow = {
   rating: number;
   comment: string | null;
   created_at: string;
+  updated_at?: string;
   is_hidden?: boolean;
   renter_profiles?: any;
 };
@@ -88,43 +89,35 @@ export class ProductReviewsService {
         eligible: false,
         alreadyReviewed: false,
         orderId: null,
+        review: null,
         message: 'Bạn chỉ có thể đánh giá sản phẩm sau khi hoàn tất đơn thuê.',
       };
     }
 
-    const { data: reviewedRows, error: reviewedError } = await this.supabase
-      .from('reviews')
-      .select('review_id, order_id')
-      .eq('target_type', PRODUCT_TARGET_TYPE)
-      .eq('target_id', productId)
-      .eq('renter_profile_id', renterProfile.renter_profile_id)
-      .in('order_id', eligibleOrderIds);
+    const existingReview = await this.getExistingProductReview(
+      renterProfile.renter_profile_id,
+      productId,
+    );
 
-    if (reviewedError) {
-      throw new InternalServerErrorException(
-        `Không thể kiểm tra trạng thái đánh giá: ${reviewedError.message}`,
-      );
-    }
-
-    const reviewedOrderIds = new Set((reviewedRows ?? []).map((row) => row.order_id));
-    const reviewableOrderId = eligibleOrderIds.find((orderId) => !reviewedOrderIds.has(orderId));
-
-    if (!reviewableOrderId) {
+    if (existingReview) {
       return {
-        eligible: false,
+        eligible: true,
         alreadyReviewed: true,
-        orderId: null,
-        message: 'Bạn đã đánh giá sản phẩm này.',
+        orderId: existingReview.order_id,
+        review: this.mapPublicReview(existingReview),
+        message: 'Bạn đã đánh giá sản phẩm này. Bạn có thể chỉnh sửa đánh giá đã gửi.',
       };
     }
 
     return {
       eligible: true,
       alreadyReviewed: false,
-      orderId: reviewableOrderId,
+      orderId: eligibleOrderIds[0],
+      review: null,
       message: null,
     };
   }
+
 
   async create(authUserId: string | undefined, productId: string, dto: CreateProductReviewDto) {
     if (!authUserId) {
@@ -132,6 +125,12 @@ export class ProductReviewsService {
     }
 
     const eligibility = await this.getEligibility(authUserId, productId);
+
+    if (eligibility.alreadyReviewed) {
+      throw new BadRequestException(
+        'Bạn đã đánh giá sản phẩm này. Vui lòng chỉnh sửa đánh giá đã có.',
+      );
+    }
 
     if (!eligibility.eligible || !eligibility.orderId) {
       throw new BadRequestException(
@@ -178,6 +177,64 @@ export class ProductReviewsService {
         ? 'Bạn đã đánh giá sản phẩm này cho đơn thuê đã chọn.'
         : `Không thể gửi đánh giá: ${error?.message ?? 'Unknown error'}`;
       throw new BadRequestException(message);
+    }
+
+    await this.refreshProductRating(productId);
+
+    return this.mapPublicReview(data);
+  }
+
+  async updateMine(authUserId: string | undefined, productId: string, dto: CreateProductReviewDto) {
+    if (!authUserId) {
+      throw new UnauthorizedException('Bạn cần đăng nhập để chỉnh sửa đánh giá.');
+    }
+
+    await this.ensureApprovedProduct(productId);
+    const renterProfile = await this.getRenterProfileByAuthUserId(authUserId);
+    const existingReview = await this.getExistingProductReview(
+      renterProfile.renter_profile_id,
+      productId,
+    );
+
+    if (!existingReview) {
+      throw new NotFoundException('Bạn chưa có đánh giá cho sản phẩm này.');
+    }
+
+    const comment = dto.comment?.trim() || null;
+    const { data, error } = await this.supabase
+      .from('reviews')
+      .update({
+        rating: dto.rating,
+        comment,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('review_id', existingReview.review_id)
+      .select(
+        `
+        review_id,
+        renter_profile_id,
+        order_id,
+        target_id,
+        rating,
+        comment,
+        created_at,
+        updated_at,
+        is_hidden,
+        renter_profiles (
+          renter_profile_id,
+          user_profiles (
+            full_name,
+            avatar_url
+          )
+        )
+      `,
+      )
+      .single();
+
+    if (error || !data) {
+      throw new BadRequestException(
+        `Không thể cập nhật đánh giá: ${error?.message ?? 'Unknown error'}`,
+      );
     }
 
     await this.refreshProductRating(productId);
@@ -299,6 +356,45 @@ export class ProductReviewsService {
     }
 
     return [...new Set((items ?? []).map((item) => item.order_id).filter(Boolean))];
+  }
+
+  private async getExistingProductReview(renterProfileId: string, productId: string) {
+    const { data, error } = await this.supabase
+      .from('reviews')
+      .select(
+        `
+        review_id,
+        renter_profile_id,
+        order_id,
+        target_id,
+        rating,
+        comment,
+        created_at,
+        updated_at,
+        is_hidden,
+        renter_profiles (
+          renter_profile_id,
+          user_profiles (
+            full_name,
+            avatar_url
+          )
+        )
+      `,
+      )
+      .eq('target_type', PRODUCT_TARGET_TYPE)
+      .eq('target_id', productId)
+      .eq('renter_profile_id', renterProfileId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException(
+        `Không thể kiểm tra đánh giá hiện có: ${error.message}`,
+      );
+    }
+
+    return data;
   }
 
   private buildSummary(reviews: ProductReviewRow[]) {

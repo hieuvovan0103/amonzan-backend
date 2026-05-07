@@ -15,6 +15,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { AdminProductReviewModule } from './admin-product-review/admin-product-review.module';
 import { ProductReviewsModule } from './product-reviews/product-reviews.module';
 import { AdminReviewsModule } from './admin-reviews/admin-reviews.module';
+import { ReviewsModule } from './reviews/reviews.module';
 import { ReturnsModule } from './returns/returns.module';
 import { AdminDisputesModule } from './admin-disputes/admin-disputes.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -37,6 +38,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     AdminProductReviewModule,
     ProductReviewsModule,
     AdminReviewsModule,
+    ReviewsModule,
     NotificationsModule,
     ReturnsModule,
     AdminDisputesModule,
